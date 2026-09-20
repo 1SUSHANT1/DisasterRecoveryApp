@@ -2,11 +2,11 @@ import subprocess
 import getpass
 
 def getService(service):
-	result=subprocess.run(["apt", "install", service])
+	result=subprocess.run(["apt", "install", "-y", service])
 	return result.returncode
 
 def installThis(service):
-	
+
 	while True:
 		code=getService(service)
 		if code == 0:
@@ -21,6 +21,13 @@ def installThis(service):
 				print(serice,"couldn't be installed. Fatal Abort")
 				exit()
 
+def gitClone():
+	defaultRepo="https://github.com/1SUSHANT1/myProjects.git"
+	dirName=defaultRepo.split("/")[-1].removesuffix(".git")
+	print(dirName)
+
+	subprocess.run(["git","clone",defaultRepo])
+
 ###################main########################
 user=getpass.getuser()
 if user != "root":
@@ -29,8 +36,7 @@ if user != "root":
 
 
 installThis("nginx")
-
-ng=getService("nginx")
-gn=getService("gunicorn")
-fl=getService("python3-flask")
-
+installThis("gunicorn")
+installThis("python3-flask")
+installThis("git")
+gitClone()
