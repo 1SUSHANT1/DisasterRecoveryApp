@@ -76,26 +76,29 @@ def gitClone(defaultRepo):
 					continue
 
 
-def verifyDirectory(defaultRepo,rootDir):
-	rootDir=Path(rootDir)
-	expPyApp=rootDir
-	expNgConf=rootDir/"serverConfiguration"/"nginx"
-	expFiConf=rootDir/"serverConfiguration"/"firewall"
-
-	if (expPyApp/"myPyScript.py").exists():
-		print("Python app found")
-	else:
-		print("Python app wasn't found")
-
-	if(expNgConf/"nginx.conf").exists():
-		print("NGINX conf file found")
-	else:
-		print("NGINX conf file not found")
-
-	if(expFiConf/"nftables.conf").exists():
-		print("Nftables conf file found")
-	else:
-		print("Nftables conf file not found")
+def locateFiles(rootDir,file,name,expDir):
+	while True:
+		if (expPyApp/file).exists():
+			print(name, "file found")
+			return (expPyApp/file)
+		else:
+			print(name," file wasn't found")
+			existence=input(f"Enter 1 if the repository contains the {name} file. Press any other key to exit: ")
+			if existence == "1":
+				loc=input(f"Enter the path to the {name} file. The path should start from {rootDir}: ") 
+				loc=Path(loc)
+				if loc.exists():
+					print(name, "file located")
+					return loc
+				else:
+					print("The file couldn't be located")
+					cont=input("Enter 1 to try again. Press any other key to exit: ")
+					if cont == "1":
+						continue
+					else:
+						exit()
+			else:
+				exit()
 
 
 
@@ -114,5 +117,23 @@ installThis("git")
 defaultRepo="https://github.com/1SUSHANT1/myProjects.git"
 rootDir=gitClone(defaultRepo)
 
+rootDir=Path(rootDir)
+expPyApp=rootDir
+expNgConf=rootDir/"serverConfiguration"/"nginx"
+expFiConf=rootDir/"serverConfiguration"/"firewall"
 
-verifyDirectory(defaultRepo,rootDir)
+actPyLoc=locateFiles(rootDir,"myPyScript.py","Python",expPyApp)
+actNgConf=locateFiles(rootDir,"nginx.conf","NGINX", expNgConf)
+actFiConf=locateFiles(rootDir,"nftables.conf","Firewall", expFiConf)
+
+
+print("Python file is at: ", actPyLoc)
+print("NGINX file is at: ", actNgConf)
+print("Firewall file is at: ", actFiConf)
+
+
+
+
+
+
+
