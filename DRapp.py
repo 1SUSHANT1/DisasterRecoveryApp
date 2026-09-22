@@ -78,9 +78,33 @@ def gitClone(defaultRepo):
 
 def locateFiles(rootDir,file,name,expDir):
 	while True:
-		if (expPyApp/file).exists():
-			print(name, "file found")
-			return (expPyApp/file)
+		expLoc=expDir/file
+		if (expLoc).exists():
+			print(name, "file found at:",expLoc)
+			choice=input(f"Enter 1 if you want to provide a different {name} file. Press any other key to use the default {file} file: ")
+			if choice == "1":
+				loc=input(f"Enter the path to the {name} file. The path should start from {rootDir}: ") 
+				loc=Path(loc)
+				if loc.exists():
+
+					with open (loc,"r") as file:
+						print(file.read())
+
+
+
+
+
+					print(name, "file located")
+					return loc
+				else:
+					print("The file couldn't be located")
+					cont=input("Enter 1 to try again. Press any other key to exit: ")
+					if cont == "1":
+						continue
+					else:
+						exit()
+			else:
+				return (expLoc)
 		else:
 			print(name," file wasn't found")
 			existence=input(f"Enter 1 if the repository contains the {name} file. Press any other key to exit: ")
@@ -135,5 +159,133 @@ print("Firewall file is at: ", actFiConf)
 
 
 
+while True:
+	pc=subprocess.run(["python3", "-m", "py_compile",actPyLoc])
+	if pc.returncode != 0:
+		print("The python app syntax is invalid")
+		choice=input("Enter 1 to provide another file. Press any other key to exit: ")
+		if choice == "1":
+			actPyLoc=locateFiles(rootDir,"myPyScript.py","Python",expPyApp)
+			continue
+		else:
+			exit()
+	else:
+		print("The python app syntax is valid")
+		break
 
+while True:
+	fc=subprocess.run(["nft", "-c","-f",actFiConf])
+	if fc.returncode != 0:
+		print("The Firewall file syntax is invalid")
+		choice=input("Enter 1 to provide another file. Press any other key to exit: ")
+		if choice == "1":
+			actFiConf=locateFiles(rootDir,"nftables.conf","Firewall", expFiConf)
+			continue
+		else:
+			exit()
+	else:
+		print("The Firewall file syntax is valid")
+		break
 
+originalFile=""
+recoverFlag=False
+
+while True:
+	whichFile=input("Enter 1 if the NGINX file is the main configuration file. Enter 2 if it is the server configuration file: ")
+	if whichFile !="1" and whichFile != "2":
+		desicion=input("Invalid input. Enter 1 to try again. Press any other key to exit: ")
+		if desicion == "1":
+			continue
+		else:
+			exit()
+
+	try:
+		if whichFile == "1":
+			try:
+				shutil.copy("/etc/nginx/nginx.conf","/etc/nginx/nginxBack.conf")
+			except:
+				print("Original File couldn't be copied")
+				choice=input("Enter 1 to provide another file. Enter 2 to ignore and proceed. Press any other key to exit: ")
+				if choice == "1":
+					actNgConf=locateFiles(rootDir,"nginx.conf","NGINX", expNgConf)
+					continue
+				elif choice == "2":
+					conf=input("This will remove the original configuration file without backup. Enter C to continue. Press any other key to try again")
+					if conf == "C":
+						print("Proceeding without the creating the backup")
+					else:
+						continue
+				else:
+					exit()
+			else:
+				originalFile=Path("/etc/nginx/nginxBack.conf")
+				print("Original file was copied to:",originalFile)
+				recoverFlag=True
+
+			shutil.copy(actNgConf,"/etc/nginx/")
+		else:
+			shutil.copy(actNgConf,"/etc/nginx/conf.d")
+	except:
+		print("The file could not be copied. Please try again. You might want to run the cleanUp.py app if the problem persists")
+		choice=input("Enter 1 to provide another file. Press any other key to exit: ")
+		if choice == "1":
+			actNgConf=locateFiles(rootDir,"nginx.conf","NGINX", expNgConf)
+			continue
+		else:
+			exit()
+	else:
+		print("NGINX file copied to the nginx directory")
+		confStr=str(actNgConf)
+		fileName=confStr.split("/")[-1]
+		print("Filename is: ",fileName)
+
+		if recoverFlag==False:
+			filePath=Path("/etc/nginx/conf.d")/fileName
+			print("FilePath is: ", filePath)
+		else:
+			filePath=Path("/etc/nginx")/fileName
+			print("FilePath is: ", filePath)
+
+	nc=subprocess.run(["nginx","-t","-c","/etc/nginx/nginx.conf"])
+	if nc.returncode != 0:
+
+		if recoverFlag == False:
+
+			print("The NGINX configuration file is invalid. This file should be removed")
+			try:
+				filePath.unlink()
+			except:
+				print("file couldn't be removed")
+				choice=input("Enter 1 to provide another file. Press any other key to exit: ")
+				if choice == "1":
+					actNgConf=locateFiles(rootDir,"nginx.conf","NGINX", expNgConf)
+					continue
+				else:
+					exit()
+			else:
+				print("The file was removed")
+				desicion=input("Enter 1 if you want to provide another file. Press any other key to exit: ")
+				if desicion == "1":
+					actNgConf=locateFiles(rootDir,"nginx.conf","NGINX", expNgConf)
+					continue
+				else:
+					exit()
+
+		else:
+			print("The NGINX configuration file is invalid")
+			desicion=input("Enter 1 to provide another file. Press any other key to recover the original file and exit")
+			if desicion == "1":
+				actNgConf=locateFiles(rootDir,"nginx.conf","NGINX", expNgConf)
+				continue
+			else:
+				try:
+					shutil.copy(originalFile,"/etc/nginx/nginx.conf")
+				except:
+					print("The original file couldn't be recovered")
+				else:
+					print("Original file was successfully recovered")	
+					exit()
+
+	else:
+		print("The NGINX file syntax is valid")
+		break

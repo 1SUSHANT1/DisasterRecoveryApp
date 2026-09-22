@@ -1,2 +1,10 @@
+*
+
+!*/
+!*.py
+
+__pycache__/
+*.pyc
+/DR/
+/DRsim/
 /myProjects/
-/useless/
