@@ -89,11 +89,6 @@ def locateFiles(rootDir,file,name,expDir):
 
 					with open (loc,"r") as file:
 						print(file.read())
-
-
-
-
-
 					print(name, "file located")
 					return loc
 				else:
@@ -131,6 +126,19 @@ user=getpass.getuser()
 if user != "root":
 	print("Insufficient Priviledges. Please run as root. Abort")
 	exit()
+
+
+home=Path.home()
+if (home/"immutables").exists():
+	print("Immutables directory already exists")
+else:
+	try:
+		(home/"immutables").mkdir()
+	except:
+		print("immutables directory could not be created. The app will exit")
+		exit()
+	else: 
+		print("Immutables directory was created")
 
 
 installThis("nginx")
@@ -204,7 +212,7 @@ while True:
 			try:
 				shutil.copy("/etc/nginx/nginx.conf","/etc/nginx/nginxBack.conf")
 			except:
-				print("Original File couldn't be copied")
+				print("Backup couldn't be made")
 				choice=input("Enter 1 to provide another file. Enter 2 to ignore and proceed. Press any other key to exit: ")
 				if choice == "1":
 					actNgConf=locateFiles(rootDir,"nginx.conf","NGINX", expNgConf)
@@ -289,3 +297,89 @@ while True:
 	else:
 		print("The NGINX file syntax is valid")
 		break
+
+actPyLocStr= str(actPyLoc)
+pyFiName=actPyLocStr.split("/")[-1]
+
+
+#while True:
+#	if (expPyApp/"myPyScript.py").exists():
+#		try:
+#			shutil.copy(expPyApp/"myPyScript.py",expPyApp/"myPyScriptBack.py")
+#		except:
+#			print("Original python file exists")
+
+
+immutables=home/"immutables"
+while True:
+	writeToImmutableFile=False
+	if (immutables/"immutableFire.conf").exists():
+		print("Immutable firewall file exists")
+	else:
+		print("Immutable firewall file doesn't exist. Creating now")
+		immutableFirewall=immutables/"immutableFire.conf"	
+		try:
+			immutableFirewall.touch()
+		except:
+			print("Couldn't create the Immutable firewall file")
+			choice=input("Enter 1 to try again. Enter 2 to continue without creating the immutable file. Press any other key to exit")
+			if choice == "1":
+				continue
+			elif choice == "2": 
+				print("Continuing without creating the immutable file")
+			else:
+				exit()
+		else:
+			print("Immutable firewall file was created")
+			writeToImmutableFile=True
+
+	backFire=expFiConf/"backFire.conf"
+
+	if backFire.exists():
+		print("A backup file already exists. Creating a new one isn't recommended")
+		desicion=input("Enter 1 to override the existing backup file (not recommended). Press any other key to skip and continue: ")
+		if desicion == "1":
+			cuRule=subprocess.run(["nft","list","ruleset"],
+			capture_output=True,
+			text=True
+			).stdout
+			backFire.write_text(cuRule)
+			print("new backup file was created")
+		else:
+			print("Proceeding with the existing backup file")
+
+
+	if writeToImmutableFile == True:
+		try:
+			immutableFirewall.write_text(cuRule)
+		except:
+			print("Couldn't write to the Immutable firewall file")
+			choice=input("Enter 1 to try again. Enter 2 to continue without writing to the immutable file. Press any other key to exit")
+			if choice == "1":
+				continue
+			elif choice == "2": 
+				print("Continuing without writing to the immutable file")
+			else:
+				exit()
+		else:
+			print("Immutable firewall backup created")
+
+
+	loadFirewall=subprocess.run(["nft","-f",actFiConf])
+	fireCode=loadFirewall.returncode
+	if fireCode == 0:
+		print("The firewall configuration file was correctly loaded into nft")
+		break
+	else:
+		print("The firewall configuration file wasn't loaded into nft")
+		choice=input("Enter 1 to try again. Press any other use the existing firewall rules")
+		if choice =="1":
+			continue
+		else:
+			print("Using the existing firewall rules")
+			break
+
+
+
+
+
