@@ -86,7 +86,6 @@ def locateFiles(rootDir,file,name,expDir):
 				loc=input(f"Enter the path to the {name} file. The path should start from {rootDir}: ") 
 				loc=Path(loc)
 				if loc.exists():
-
 					with open (loc,"r") as file:
 						print(file.read())
 					print(name, "file located")
@@ -158,14 +157,11 @@ actPyLoc=locateFiles(rootDir,"myPyScript.py","Python",expPyApp)
 actNgConf=locateFiles(rootDir,"nginx.conf","NGINX", expNgConf)
 actFiConf=locateFiles(rootDir,"nftables.conf","Firewall", expFiConf)
 
-
 print("Python file is at: ", actPyLoc)
 print("NGINX file is at: ", actNgConf)
 print("Firewall file is at: ", actFiConf)
 
-
-
-
+immutables=home/"immutables"
 
 while True:
 	pc=subprocess.run(["python3", "-m", "py_compile",actPyLoc])
@@ -281,43 +277,54 @@ while True:
 
 		else:
 			print("The NGINX configuration file is invalid")
-			desicion=input("Enter 1 to provide another file. Press any other key to recover the original file and exit")
+			try:
+				shutil.copy(originalFile,"/etc/nginx/nginx.conf")
+			except:
+				print("The original file couldn't be recovered. This may cause problems.")
+			else:
+				print("Original file was successfully recovered")	
+
+			desicion=input("Enter 1 to provide another file. Press any other key to exit: ")
 			if desicion == "1":
 				actNgConf=locateFiles(rootDir,"nginx.conf","NGINX", expNgConf)
 				continue
 			else:
-				try:
-					shutil.copy(originalFile,"/etc/nginx/nginx.conf")
-				except:
-					print("The original file couldn't be recovered")
-				else:
-					print("Original file was successfully recovered")	
-					exit()
+				exit()
 
 	else:
 		print("The NGINX file syntax is valid")
-		break
-
-actPyLocStr= str(actPyLoc)
-pyFiName=actPyLocStr.split("/")[-1]
 
 
-#while True:
-#	if (expPyApp/"myPyScript.py").exists():
-#		try:
-#			shutil.copy(expPyApp/"myPyScript.py",expPyApp/"myPyScriptBack.py")
-#		except:
-#			print("Original python file exists")
+	if (immutables/"immutableNGINX.conf").exists(): 
+			print("Immutable NGINX file exists")
+	elif recoverFlag == True:
+		print("Immutable NGINX  file doesn't exist. Creating now")
+		immutableNGINX=immutables/"immutableNGINX.conf"
+		try:
+			shutil.copy("/etc/nginx/nginx.conf",immutableNGINX)
+		except:
+			print("Couldn't create the Immutable NGINX file")
+			choice=input("Enter 1 to try again. Enter 2 to continue without creating the immutable file. Press any other key to exit")
+			if choice == "1":
+				continue
+			elif choice == "2": 
+				print("Continuing without creating the immutable file")
+#				break
+			else:
+				exit()
+		else:
+			print("Immutable NGINX file was created")
+	break
 
 
-immutables=home/"immutables"
+
 while True:
 	writeToImmutableFile=False
 	if (immutables/"immutableFire.conf").exists():
 		print("Immutable firewall file exists")
 	else:
 		print("Immutable firewall file doesn't exist. Creating now")
-		immutableFirewall=immutables/"immutableFire.conf"	
+		immutableFirewall=immutables/"immutableFire.conf"
 		try:
 			immutableFirewall.touch()
 		except:
@@ -335,14 +342,15 @@ while True:
 
 	backFire=expFiConf/"backFire.conf"
 
+	cuRule=subprocess.run(["nft","list","ruleset"],
+	capture_output=True,
+	text=True
+	).stdout
+
 	if backFire.exists():
 		print("A backup file already exists. Creating a new one isn't recommended")
 		desicion=input("Enter 1 to override the existing backup file (not recommended). Press any other key to skip and continue: ")
 		if desicion == "1":
-			cuRule=subprocess.run(["nft","list","ruleset"],
-			capture_output=True,
-			text=True
-			).stdout
 			backFire.write_text(cuRule)
 			print("new backup file was created")
 		else:
@@ -356,9 +364,11 @@ while True:
 			print("Couldn't write to the Immutable firewall file")
 			choice=input("Enter 1 to try again. Enter 2 to continue without writing to the immutable file. Press any other key to exit")
 			if choice == "1":
+				immutableFirewall.unlink()
 				continue
 			elif choice == "2": 
 				print("Continuing without writing to the immutable file")
+				immutableFirewall.unlink()
 			else:
 				exit()
 		else:
@@ -380,6 +390,8 @@ while True:
 			break
 
 
+actPyLocStr= str(actPyLoc)
+pyFiName=actPyLocStr.split("/")[-1]
 
 
 
