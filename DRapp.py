@@ -118,6 +118,29 @@ def locateFiles(rootDir,file,name,expDir):
 			else:
 				exit()
 
+def certPrep():
+	result=0
+	a=subprocess.run(["apt", "install", "python3", "python3-dev", "python3-venv", "libaugeas-dev", "gcc"])
+	result=result+a.returncode
+	b=subprocess.run(["python3", "-m", "venv", "/opt/certbot/"])
+	result=result+b.returncode
+	c=subprocess.run(["/opt/certbot/bin/pip", "install", "certbot", "certbot-nginx"])
+	result=result+c.returncode
+
+	return result
+
+
+def installCert():
+	a=subprocess.run(["/opt/certbot/bin/certbot","--nginx"])
+	if a.returncode!=0:
+		print("Certificate installation has failed")
+		choice=input("Enter 1 to try again. Press any other key to skip: ")
+		if choice == "1":
+			installCert()
+
+
+
+
 
 
 ###################main########################
@@ -395,3 +418,45 @@ pyFiName=actPyLocStr.split("/")[-1]
 
 
 
+curDir=Path.cwd()
+curDir=str(curDir)
+homeDir=curDir.split("/")
+strHome="/"+homeDir[1]+"/"+homeDir[2]
+pathHome=Path(strHome)
+
+subprocess.run(["chmod","o+rx",pathHome])
+subprocess.run(["chmod","-R","755",rootDir])
+startNGINX=subprocess.run(["systemctl", "start","nginx"])
+if startNGINX.returncode == 0:
+	print("NGINX started")
+else:
+	print("NGINX failed to start")
+
+
+ipad=subprocess.run(["hostname","-I"],
+capture_output=True,
+text=True
+).stdout;
+ipad=ipad.split()[0]
+print(f"Please enable port forwarding on your router for the IP address {ipad} at:")
+print("TCP port 80")
+print("TCP port 443")
+print("This will allow HTTP and HTTPS traffic from the internet to reach the computer")
+
+portfor=input(f"Enter 1 if you successfully set the port forwarding. Press any other key to exit: ")
+
+if(portfor!="1"):
+	exit()
+
+while True:
+	result=certPrep()
+	if result != 0:
+		print(f"Some certbot dependent actions have failed")
+		choice=input("Enter 1 to try again. Press any other key to skip certificate installation: ")
+		if choice =="1":
+			continue
+		else:
+			break
+	else:
+		installCert()
+		break
