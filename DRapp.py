@@ -41,7 +41,7 @@ def gitClone(defaultRepo):
 		alreadyEx=Path(dirName)
 		if alreadyEx.exists():
 			print("Directory already exists")
-			desicion=input("Enter 1 to work with the existing directory. Enter 2 to remove the existing directory. Press any other key to restart git clone: ")
+			desicion=input("Enter 1 to work with the existing directory. Enter 2 to remove the existing directory and get a fresh copy. Press any other key to restart git clone: ")
 			if desicion == "1":
 				print("Using the existing directory")
 				return(dirName)
@@ -138,11 +138,24 @@ def installCert():
 		if choice == "1":
 			installCert()
 
+def addGroup(group):
+	gA=subprocess.run(["groupadd",group])
+	if gA.returncode==9:
+		return 0
+	else:
+		return gA.returncode
 
 
+def addToGroup(user,group):
+	aN=subprocess.run(["groupmod","-aU",user,group])
+	return aN.returncode
 
-
-
+def startup(service):
+	sT=subprocess.run(["systemctl", "enable", service])
+	if sT.returncode==0:
+		print(f"{service} was successfully enabled")
+	else:
+		print(f"{service} couldn't be enabled")
 ###################main########################
 user=getpass.getuser()
 if user != "root":
@@ -175,7 +188,9 @@ rootDir=Path(rootDir)
 expPyApp=rootDir
 expNgConf=rootDir/"serverConfiguration"/"nginx"
 expFiConf=rootDir/"serverConfiguration"/"firewall"
+expGuConf=rootDir/"serverConfiguration"/"gunicorn"
 
+actGuLoc=locateFiles(rootDir,"gunicorn","Gunicorn",expGuConf)
 actPyLoc=locateFiles(rootDir,"myPyScript.py","Python",expPyApp)
 actNgConf=locateFiles(rootDir,"nginx.conf","NGINX", expNgConf)
 actFiConf=locateFiles(rootDir,"nftables.conf","Firewall", expFiConf)
@@ -412,6 +427,32 @@ while True:
 			print("Using the existing firewall rules")
 			break
 
+######GUNICORN
+
+while True:
+	checkFile=Path("/tmp/gunicorn.service")
+	shutil.copy(actGuLoc,checkFile)
+	verifyGunicorn=subprocess.run(["systemd-analyze","verify",checkFile])
+	checkFile.unlink()
+
+	if verifyGunicorn.returncode==0:
+		try:
+			shutil.copy(actGuLoc,"/etc/systemd/system/gunicorn.service")
+		except:
+			print("Gunicorn systemd service couldn't be created")
+			break
+		else:
+			print("Gunicorn systemd service created")
+			break
+	else:
+		print("Gunicorn configuration file failed syntax check")
+		choice=input("Enter 1 to provide another file. Press any other key to skip")
+		if choice=="1":
+			actGuLoc=locateFiles(rootDir,"gunicorn","Gunicorn",expGuConf)
+			continue
+		else:
+			break
+
 
 actPyLocStr= str(actPyLoc)
 pyFiName=actPyLocStr.split("/")[-1]
@@ -420,17 +461,68 @@ pyFiName=actPyLocStr.split("/")[-1]
 
 curDir=Path.cwd()
 curDir=str(curDir)
-homeDir=curDir.split("/")
-strHome="/"+homeDir[1]+"/"+homeDir[2]
-pathHome=Path(strHome)
+traverseThis=curDir.split("/")
+traverseThis.pop(0)
 
-subprocess.run(["chmod","o+rx",pathHome])
-subprocess.run(["chmod","-R","755",rootDir])
+
+gUser=input("Enter 1 to enter a custom gunicorn user. Press any other key to use the default \"gunicorn\" user: ")
+if gUser=="1":
+	gunicorn=input("Enter the name of the gunicorn user: ")
+else:
+	gunicorn="gunicorn"
+
+addGUser=subprocess.run(["useradd","-mr",gunicorn])
+if addGUser.returncode==0 or addGUser.returncode==9:
+	print("Gunicorn user created")
+else:
+	print("Failed to user Gunicorn user")
+
+group="webManagers"
+nginx="www-data"
+
+if addGroup(group)==0:
+	print("Group Added")
+	if addToGroup(nginx,group)==0:
+		print(f"{nginx} added to {group}")
+	else:
+		print(f"{nginx} couldn't be added to {group}")
+
+	if addToGroup(gunicorn,group)==0:
+		print(f"{gunicorn} added to {group}")
+	else:
+		printf("{gunicorn} couldn't be added to {group}")
+
+
+	constructPath=""
+	firstDir=True
+	for dir in traverseThis:
+		constructPath=constructPath+"/"+dir
+		print(f"Dir is: {constructPath}")
+		if firstDir==True:
+			firstDir=False
+		else:
+			subprocess.run(["chgrp","webManagers",constructPath])
+			subprocess.run(["chmod","g+x",constructPath])
+	subprocess.run(["chgrp","-R","webManagers",rootDir])
+	subprocess.run(["chmod","-R","g+rx",rootDir])
+
+else:
+	print("Group wasn't added")
+
 startNGINX=subprocess.run(["systemctl", "start","nginx"])
+
 if startNGINX.returncode == 0:
 	print("NGINX started")
 else:
 	print("NGINX failed to start")
+
+
+startGunicorn=subprocess.run(["systemctl", "start","gunicorn"])
+
+if startGunicorn.returncode == 0:
+	print("Gunicorn started")
+else:
+	print("Gunicorn failed to start")
 
 
 ipad=subprocess.run(["hostname","-I"],
@@ -460,3 +552,7 @@ while True:
 	else:
 		installCert()
 		break
+
+
+startup("gunicorn")
+startup("nginx")
