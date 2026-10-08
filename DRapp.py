@@ -2,14 +2,18 @@ import subprocess
 import getpass
 from pathlib import Path
 import shutil
-
-def getService(service):
-	result=subprocess.run(["apt", "install", "-y", service])
-	return result.returncode
-
-def installThis(service):
+import psutil
+import psycpog
+########################INSTALLS SERVICES#######################################
+def installThis(service,OS):
 	while True:
-		code=getService(service)
+		if OS=="debian":
+			code=(subprocess.run(["apt", "install", "-y", service])).returncode
+		elif OS=="alpine":
+			code=(subprocess.run(["apk","add",service])).returncode
+		else:
+			print("Operating system not supported. Fatal. Abort")
+			exit()
 		if code == 0:
 			print(service, "successfully installed.")
 			break
@@ -22,6 +26,7 @@ def installThis(service):
 				print(serice,"couldn't be installed. Fatal Abort")
 				exit()
 
+############################################CLONES REMOTE REPO##########################
 def gitClone(defaultRepo):
 	while True:
 		print("This is the default repo:", defaultRepo)
@@ -75,7 +80,7 @@ def gitClone(defaultRepo):
 					print("Remote Repo couldn't be cloned. Please try again")
 					continue
 
-
+####################################LOCATES FILES####################################
 def locateFiles(rootDir,file,name,expDir):
 	while True:
 		expLoc=expDir/file
@@ -118,6 +123,7 @@ def locateFiles(rootDir,file,name,expDir):
 			else:
 				exit()
 
+##################################INSTALLS CERTBOT DEPENDENCIES######################
 def certPrep():
 	result=0
 	a=subprocess.run(["apt", "install", "python3", "python3-dev", "python3-venv", "libaugeas-dev", "gcc"])
@@ -129,7 +135,7 @@ def certPrep():
 
 	return result
 
-
+###############################RUNS CERTBOT#############################
 def installCert():
 	a=subprocess.run(["/opt/certbot/bin/certbot","--nginx"])
 	if a.returncode!=0:
@@ -138,6 +144,7 @@ def installCert():
 		if choice == "1":
 			installCert()
 
+#################################CREATES A GROUP####################
 def addGroup(group):
 	gA=subprocess.run(["groupadd",group])
 	if gA.returncode==9:
@@ -146,23 +153,116 @@ def addGroup(group):
 		return gA.returncode
 
 
+#################################ADDS USER TO GROUP#####################
 def addToGroup(user,group):
 	aN=subprocess.run(["groupmod","-aU",user,group])
 	return aN.returncode
 
-def startup(service):
-	sT=subprocess.run(["systemctl", "enable", service])
+
+###################################ENABLES SERVICES ON STARTUP###################
+def startSv(service,OS):
+	if OS=="debian":
+		sR=subprocess.run(["systemctl", "start",service])
+		sT=subprocess.run(["systemctl", "enable", service])
+	elif OS=="alpine":
+		sR=subprocess.run(["rc-service",service,"start"])
+		sT=subprocess.run(["rc-update","add",service,"default"])
+	if sR.returncode==0:
+		print(f"{service} was successfully started")
+	else:
+		print(f"{service} couldn't be started")
 	if sT.returncode==0:
 		print(f"{service} was successfully enabled")
 	else:
 		print(f"{service} couldn't be enabled")
-###################main########################
+
+#################################DEB GUNICORN HANDLING##################
+def gunicornDeb(actGuLoc,rootDir,expGuConf):
+	while True:
+		checkFile=Path("/tmp/gunicorn.service")
+		shutil.copy(actGuLoc,checkFile)
+		verifyGunicorn=subprocess.run(["systemd-analyze","verify",checkFile])
+		checkFile.unlink()
+
+		if verifyGunicorn.returncode==0:
+			try:
+				shutil.copy(actGuLoc,"/etc/systemd/system/gunicorn.service")
+			except:
+				print("Gunicorn systemd service couldn't be created")
+				break
+			else:
+				print("Gunicorn systemd service created")
+				break
+		else:
+			print("Gunicorn configuration file failed syntax check")
+			choice=input("Enter 1 to provide another file. Press any other key to skip")
+			if choice=="1":
+				actGuLoc=locateFiles(rootDir,"gunicornDebian","Gunicorn",expGuConf)
+				continue
+			else:
+				break
+###########################ALP GUNICORN HANDLING#############################
+def gunicornAlp(actGuLoc,rootDir,expGuConf):
+	while True:
+		checkFile=Path("/tmp/gunicorn")
+		shutil.copy(actGuLoc,checkFile)
+		verifyGunicorn=subprocess.run(["sh","-n",checkFile])
+		checkFile.unlink()
+
+		if verifyGunicorn.returncode==0:
+			try:
+				shutil.copy(actGuLoc,"/etc/init.d/gunicorn")
+			except:
+				print("Gunicorn systemd service couldn't be created")
+				break
+			else:
+				print("Gunicorn systemd service created")
+				break
+		else:
+			print("Gunicorn configuration file failed shell syntax check")
+			choice==input("Enter 1 to ignore and proceed. Press any other key to provide another file")
+			if input=="1":
+				try:
+					shutil.copy(actGuLoc,"/etc/init.d/gunicorn")
+				except:
+					print("Gunicorn systemd service couldn't be created")
+					break
+				else:
+					print("Gunicorn systemd service created")
+					break
+			else:
+				actGuLoc=locateFiles(rootDir,"gunicornAlpine","Gunicorn",expGuConf)
+				continue
+
+################################MAIN########################
+
+#############################VERIFY USER#####################
 user=getpass.getuser()
 if user != "root":
 	print("Insufficient Priviledges. Please run as root. Abort")
 	exit()
 
+#########################OS DETECTION#######################
+OS=""
+with open ("/etc/os-release") as file:
+	for line in file:
+		idField=line.strip().split("=")
+		if idField[0]=="ID":
+			OS=idField[1]
+			break
+print(f"Operating system: {OS}")
 
+firewallFile=""
+if OS=="debian":
+	firewallFile="nftables.conf"
+	nginxSFLoc="/etc/nginx/conf.d"
+	gunicornFileName="gunicornDebian"
+elif OS=="alpine":
+	firewallFile="nftables.nft"
+	nginxSFLoc="/etc/nginx/http.d"
+	gunicornFileName="gunicornAlpine"
+
+############################IMMUTABLE DIRECTORY CREATION##################
 home=Path.home()
 if (home/"immutables").exists():
 	print("Immutables directory already exists")
@@ -174,33 +274,35 @@ else:
 		exit()
 	else: 
 		print("Immutables directory was created")
+immutables=home/"immutables"
 
-
-installThis("nginx")
-installThis("gunicorn")
-installThis("python3-flask")
-installThis("git")
+##############################INSTALL SERVICES###################
+installThis("nginx",OS)
+installThis("gunicorn",OS)
+installThis("python3-flask",OS)
+installThis("git",OS)
 
 defaultRepo="https://github.com/1SUSHANT1/myProjects.git"
 rootDir=gitClone(defaultRepo)
-
 rootDir=Path(rootDir)
+
+#################################EXPECTED FILE LOCATIONS#############
 expPyApp=rootDir
 expNgConf=rootDir/"serverConfiguration"/"nginx"
 expFiConf=rootDir/"serverConfiguration"/"firewall"
 expGuConf=rootDir/"serverConfiguration"/"gunicorn"
 
-actGuLoc=locateFiles(rootDir,"gunicorn","Gunicorn",expGuConf)
+#####################################ACTUAL FILE LOCATIONS###########
+actGuLoc=locateFiles(rootDir,gunicornFileName,"Gunicorn",expGuConf)
 actPyLoc=locateFiles(rootDir,"myPyScript.py","Python",expPyApp)
 actNgConf=locateFiles(rootDir,"nginx.conf","NGINX", expNgConf)
-actFiConf=locateFiles(rootDir,"nftables.conf","Firewall", expFiConf)
+actFiConf=locateFiles(rootDir,firewallFile,"Firewall", expFiConf)
 
-print("Python file is at: ", actPyLoc)
-print("NGINX file is at: ", actNgConf)
-print("Firewall file is at: ", actFiConf)
+#print("Python file is at: ", actPyLoc)
+#print("NGINX file is at: ", actNgConf)
+#print("Firewall file is at: ", actFiConf)
 
-immutables=home/"immutables"
-
+#########################PYTHON FILE SYNTAX#######################
 while True:
 	pc=subprocess.run(["python3", "-m", "py_compile",actPyLoc])
 	if pc.returncode != 0:
@@ -215,13 +317,14 @@ while True:
 		print("The python app syntax is valid")
 		break
 
+#########################FIREWALL CONFIGURATION FILE SYNTAX###############
 while True:
 	fc=subprocess.run(["nft", "-c","-f",actFiConf])
 	if fc.returncode != 0:
 		print("The Firewall file syntax is invalid")
 		choice=input("Enter 1 to provide another file. Press any other key to exit: ")
 		if choice == "1":
-			actFiConf=locateFiles(rootDir,"nftables.conf","Firewall", expFiConf)
+			actFiConf=locateFiles(rootDir,firewallFile,"Firewall", expFiConf)
 			continue
 		else:
 			exit()
@@ -232,6 +335,7 @@ while True:
 originalFile=""
 recoverFlag=False
 
+##########################NGINX CONFIGURATION FILE SYNTAX AND LOCATE###############
 while True:
 	whichFile=input("Enter 1 if the NGINX file is the main configuration file. Enter 2 if it is the server configuration file: ")
 	if whichFile !="1" and whichFile != "2":
@@ -266,7 +370,7 @@ while True:
 
 			shutil.copy(actNgConf,"/etc/nginx/")
 		else:
-			shutil.copy(actNgConf,"/etc/nginx/conf.d")
+			shutil.copy(actNgConf,nginxSFLoc)
 	except:
 		print("The file could not be copied. Please try again. You might want to run the cleanUp.py app if the problem persists")
 		choice=input("Enter 1 to provide another file. Press any other key to exit: ")
@@ -282,7 +386,7 @@ while True:
 		print("Filename is: ",fileName)
 
 		if recoverFlag==False:
-			filePath=Path("/etc/nginx/conf.d")/fileName
+			filePath=Path(nginxSFLoc)/fileName
 			print("FilePath is: ", filePath)
 		else:
 			filePath=Path("/etc/nginx")/fileName
@@ -316,7 +420,7 @@ while True:
 		else:
 			print("The NGINX configuration file is invalid")
 			try:
-				shutil.copy(originalFile,"/etc/nginx/nginx.conf")
+				shutil.copy(originalFile,nginxSFLoc)
 			except:
 				print("The original file couldn't be recovered. This may cause problems.")
 			else:
@@ -339,7 +443,7 @@ while True:
 		print("Immutable NGINX  file doesn't exist. Creating now")
 		immutableNGINX=immutables/"immutableNGINX.conf"
 		try:
-			shutil.copy("/etc/nginx/nginx.conf",immutableNGINX)
+			shutil.copy(nginxSFLoc,immutableNGINX)
 		except:
 			print("Couldn't create the Immutable NGINX file")
 			choice=input("Enter 1 to try again. Enter 2 to continue without creating the immutable file. Press any other key to exit")
@@ -355,14 +459,14 @@ while True:
 	break
 
 
-
+#########################LOADING FIREWALL######################
 while True:
 	writeToImmutableFile=False
-	if (immutables/"immutableFire.conf").exists():
+	if (immutables/firewallFile).exists():
 		print("Immutable firewall file exists")
 	else:
 		print("Immutable firewall file doesn't exist. Creating now")
-		immutableFirewall=immutables/"immutableFire.conf"
+		immutableFirewall=immutables/firewallFile
 		try:
 			immutableFirewall.touch()
 		except:
@@ -427,44 +531,15 @@ while True:
 			print("Using the existing firewall rules")
 			break
 
-######GUNICORN
+###############GUNICORN FILE SYNTAX AND LOCATION##################
 
-while True:
-	checkFile=Path("/tmp/gunicorn.service")
-	shutil.copy(actGuLoc,checkFile)
-	verifyGunicorn=subprocess.run(["systemd-analyze","verify",checkFile])
-	checkFile.unlink()
-
-	if verifyGunicorn.returncode==0:
-		try:
-			shutil.copy(actGuLoc,"/etc/systemd/system/gunicorn.service")
-		except:
-			print("Gunicorn systemd service couldn't be created")
-			break
-		else:
-			print("Gunicorn systemd service created")
-			break
-	else:
-		print("Gunicorn configuration file failed syntax check")
-		choice=input("Enter 1 to provide another file. Press any other key to skip")
-		if choice=="1":
-			actGuLoc=locateFiles(rootDir,"gunicorn","Gunicorn",expGuConf)
-			continue
-		else:
-			break
+if OS=="debian":
+	gunicornDeb(actGuLoc,rootDir,expGuConf)
+elif OS=="alpine":
+	gunicornAlp(actGuLoc,rootDir,expGuConf)
 
 
-actPyLocStr= str(actPyLoc)
-pyFiName=actPyLocStr.split("/")[-1]
-
-
-
-curDir=Path.cwd()
-curDir=str(curDir)
-traverseThis=curDir.split("/")
-traverseThis.pop(0)
-
-
+##########################GUNICORN USER CREATION#############################
 gUser=input("Enter 1 to enter a custom gunicorn user. Press any other key to use the default \"gunicorn\" user: ")
 if gUser=="1":
 	gunicorn=input("Enter the name of the gunicorn user: ")
@@ -477,9 +552,36 @@ if addGUser.returncode==0 or addGUser.returncode==9:
 else:
 	print("Failed to user Gunicorn user")
 
-group="webManagers"
-nginx="www-data"
 
+#################################START SERVICES######################
+startSv("gunicorn",OS)
+startSv("nginx",OS)
+
+##########################PREPARATION FOR USERS AND PERMISSONS###############
+nginx=""
+
+for process in psutil.process_iter(["name", "username", "cmdline"]):
+	info = process.info
+	cmdline = " ".join(info["cmdline"] or [])
+
+	if info["name"] == "nginx" and "worker process" in cmdline:
+		nginx = info["username"]
+		break
+else:
+	if OS=="debian":
+		nginx="www-data"
+	elif OS=="alpine":
+		nginx="nginx"
+
+group="webManagers"
+#nginx="www-data"
+
+curDir=Path.cwd()
+curDir=str(curDir)
+traverseThis=curDir.split("/")
+traverseThis.pop(0)
+
+#####################CREATE GROUP, USERS AND MANAGE PERMISSIONS##################
 if addGroup(group)==0:
 	print("Group Added")
 	if addToGroup(nginx,group)==0:
@@ -509,22 +611,8 @@ if addGroup(group)==0:
 else:
 	print("Group wasn't added")
 
-startNGINX=subprocess.run(["systemctl", "start","nginx"])
 
-if startNGINX.returncode == 0:
-	print("NGINX started")
-else:
-	print("NGINX failed to start")
-
-
-startGunicorn=subprocess.run(["systemctl", "start","gunicorn"])
-
-if startGunicorn.returncode == 0:
-	print("Gunicorn started")
-else:
-	print("Gunicorn failed to start")
-
-
+################################PORT FORWARDING################
 ipad=subprocess.run(["hostname","-I"],
 capture_output=True,
 text=True
@@ -540,6 +628,7 @@ portfor=input(f"Enter 1 if you successfully set the port forwarding. Press any o
 if(portfor!="1"):
 	exit()
 
+#################################RUN CERTBOT####################
 while True:
 	result=certPrep()
 	if result != 0:
@@ -553,6 +642,4 @@ while True:
 		installCert()
 		break
 
-
-startup("gunicorn")
-startup("nginx")
+###############################ENABLE AT STARTUP################
