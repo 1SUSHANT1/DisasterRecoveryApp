@@ -3,7 +3,7 @@ import getpass
 from pathlib import Path
 import shutil
 import psutil
-import psycpog
+#import psycpog
 ########################INSTALLS SERVICES#######################################
 def installThis(service,OS):
 	while True:
