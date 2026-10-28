@@ -2,8 +2,8 @@ import subprocess
 import getpass
 from pathlib import Path
 import shutil
-import psutil
-#import psycpog
+import sys
+import os
 ########################INSTALLS SERVICES#######################################
 def installThis(service,OS):
 	while True:
@@ -23,8 +23,33 @@ def installThis(service,OS):
 			if choice == "1":
 				continue
 			else:
-				print(serice,"couldn't be installed. Fatal Abort")
+				print(service,"couldn't be installed. Fatal Abort")
 				exit()
+def installPyPackage(package):
+	code=subprocess.run([sys.executable,"-m","pip","install",package]).returncode
+	if code ==0:
+		print(f"{package} sucessfully installed")
+	else:
+		print(f"{package} installation failed")
+		choice=input("Enter 1 to try again. Enter any other key to quit")
+		if choice == "1":
+			installPyPackage(package)
+		else:
+			print(package,"couldn't be installed. Fatal Abort")
+			exit()
+
+def handleVenv():
+	venv=Path("venv")
+	activationPath=venv/"bin/activate"
+
+	if sys.prefix != sys.base_prefix:
+		return
+	
+	if not venv.exists():
+		subprocess.run(["python3","-m","venv",str(venv)])
+
+	python=venv/"bin"/"python"
+	os.execv(str(python),[str(python), *sys.argv])
 
 ############################################CLONES REMOTE REPO##########################
 def gitClone(defaultRepo):
@@ -281,6 +306,12 @@ installThis("nginx",OS)
 installThis("gunicorn",OS)
 installThis("python3-flask",OS)
 installThis("git",OS)
+installThis("python3-pip",OS)
+installThis("python3-venv",OS)
+
+handleVenv()
+installPyPackage("psutil")
+import psutil
 
 defaultRepo="https://github.com/1SUSHANT1/myProjects.git"
 rootDir=gitClone(defaultRepo)
@@ -613,23 +644,33 @@ else:
 
 
 ################################PORT FORWARDING################
-ipad=subprocess.run(["hostname","-I"],
+#ipad=subprocess.run(["hostname","-I"],
+#capture_output=True,
+#text=True
+#).stdout;
+#ipad=ipad.split()[0]
+
+ipaddr=subprocess.run(["ip","-4","-o","addr","show","scope","global"],
 capture_output=True,
-text=True
-).stdout;
-ipad=ipad.split()[0]
-print(f"Please enable port forwarding on your router for the IP address {ipad} at:")
-print("TCP port 80")
-print("TCP port 443")
-print("This will allow HTTP and HTTPS traffic from the internet to reach the computer")
+text=True).stdout.splitlines()
 
-portfor=input(f"Enter 1 if you successfully set the port forwarding. Press any other key to exit: ")
-
-if(portfor!="1"):
-	exit()
+localIPs=[]
+for line in ipaddr:
+	temp = line.split("inet")[1].split("/")[0].strip()
+	localIPs.append(temp)
 
 #################################RUN CERTBOT####################
 while True:
+	print(f"Please enable port forwarding from your router to one of the suitable IP Addresses below on TCP port 80 and TCP port 443 ")
+	print("This will allow HTTP and HTTPS traffic from the internet to reach the computer")
+
+	for addr in localIPs:
+		print(addr)
+	portfor=input(f"Enter 1 if you successfully set the port forwarding to one of the addresses above. Press any other key to skip HTTPS certificates: ")
+
+	if(portfor!="1"):
+		break
+
 	result=certPrep()
 	if result != 0:
 		print(f"Some certbot dependent actions have failed")
@@ -643,3 +684,5 @@ while True:
 		break
 
 ###############################ENABLE AT STARTUP################
+startSv("nginx",OS)
+startSv("gunicorn",OS)

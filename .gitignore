@@ -10,3 +10,4 @@ __pycache__/
 /myProjects/
 /useless/
 .*
+/venv/
