@@ -154,7 +154,7 @@ def certPrep(OS):
 	if OS=="debian":
 		a=subprocess.run(["apt", "install", "python3", "python3-dev", "python3-venv", "libaugeas-dev", "gcc"])
 	elif OS=="alpine":
-		a=subprocess.run(["apk", "add", "python3", "py3-dev", "py3-venv", "libaugeas-dev", "gcc"])
+		a=subprocess.run(["apk", "add", "python3", "python3-dev", "py3-virtualenv", "augeas-dev", "gcc"])
 	result=result+a.returncode
 	b=subprocess.run(["python3", "-m", "venv", "/opt/certbot/"])
 	result=result+b.returncode
@@ -284,8 +284,10 @@ with open ("/etc/os-release") as file:
 	for line in file:
 		idField=line.strip().split("=")
 		if idField[0]=="ID":
-			OS=idField[1]
+			OS=idField[1].strip('"')
 			break
+if OS=="nura":
+	OS="alpine"
 print(f"Operating system: {OS}")
 
 firewallFile=""
