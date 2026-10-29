@@ -10,7 +10,7 @@ def installThis(service,OS):
 		if OS=="debian":
 			code=(subprocess.run(["apt", "install", "-y", service])).returncode
 		elif OS=="alpine":
-			code=(subprocess.run(["apk","add",service])).returncode
+			code=(subprocess.run(["apk","--no-interactive","add",service])).returncode
 		else:
 			print("Operating system not supported. Fatal. Abort")
 			exit()
@@ -286,9 +286,12 @@ with open ("/etc/os-release") as file:
 		if idField[0]=="ID":
 			OS=idField[1].strip('"')
 			break
+print(f"Operating system: {OS}")
+
+if OS=="ubuntu":
+	OS="debian"
 if OS=="nura":
 	OS="alpine"
-print(f"Operating system: {OS}")
 
 firewallFile=""
 if OS=="debian":
