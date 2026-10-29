@@ -187,8 +187,11 @@ def addGroup(group,OS):
 
 
 #################################ADDS USER TO GROUP#####################
-def addToGroup(user,group):
-	aN=subprocess.run(["groupmod","-aU",user,group])
+def addToGroup(user,group,OS):
+	if OS=="debian":
+		aN=subprocess.run(["groupmod","-aU",user,group])
+	elif OS=="alpine":
+		aN=subprocess.run(["adduser",user,group])
 	return aN.returncode
 
 
@@ -635,12 +638,12 @@ traverseThis.pop(0)
 
 if addGroup(group,OS)==0:
 	print("Group Added")
-	if addToGroup(nginx,group)==0:
+	if addToGroup(nginx,group,OS)==0:
 		print(f"{nginx} added to {group}")
 	else:
 		print(f"{nginx} couldn't be added to {group}")
 
-	if addToGroup(gunicorn,group)==0:
+	if addToGroup(gunicorn,group,OS)==0:
 		print(f"{gunicorn} added to {group}")
 	else:
 		printf("{gunicorn} couldn't be added to {group}")
