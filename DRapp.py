@@ -149,9 +149,12 @@ def locateFiles(rootDir,file,name,expDir):
 				exit()
 
 ##################################INSTALLS CERTBOT DEPENDENCIES######################
-def certPrep():
+def certPrep(OS):
 	result=0
-	a=subprocess.run(["apt", "install", "python3", "python3-dev", "python3-venv", "libaugeas-dev", "gcc"])
+	if OS=="debian":
+		a=subprocess.run(["apt", "install", "python3", "python3-dev", "python3-venv", "libaugeas-dev", "gcc"])
+	elif OS=="alpine":
+		a=subprocess.run(["apk", "add", "python3", "py3-dev", "py3-venv", "libaugeas-dev", "gcc"])
 	result=result+a.returncode
 	b=subprocess.run(["python3", "-m", "venv", "/opt/certbot/"])
 	result=result+b.returncode
@@ -170,12 +173,17 @@ def installCert():
 			installCert()
 
 #################################CREATES A GROUP####################
-def addGroup(group):
-	gA=subprocess.run(["groupadd",group])
-	if gA.returncode==9:
-		return 0
-	else:
-		return gA.returncode
+def addGroup(group,OS):
+	if OS=="debian":
+		gA=subprocess.run(["groupadd",group])
+		if gA.returncode==9:
+			return 0
+	elif OS=="alpine":
+		gA=subprocess.run(["addgroup",group])
+		if gA.returncode==1:
+			return 0
+
+	return gA.returncode
 
 
 #################################ADDS USER TO GROUP#####################
@@ -303,11 +311,18 @@ immutables=home/"immutables"
 
 ##############################INSTALL SERVICES###################
 installThis("nginx",OS)
-installThis("gunicorn",OS)
-installThis("python3-flask",OS)
 installThis("git",OS)
-installThis("python3-pip",OS)
-installThis("python3-venv",OS)
+installThis("nftables",OS)
+if OS=="debian":
+	installThis("python3-flask",OS)
+	installThis("gunicorn",OS)
+	installThis("python3-pip",OS)
+	installThis("python3-venv",OS)
+elif OS=="alpine":
+	installThis("py3-flask",OS)
+	installThis("py3-gunicorn",OS)
+	installThis("py3-pip",OS)
+	installThis("py3-virtualenv",OS)
 
 handleVenv()
 installPyPackage("psutil")
@@ -577,7 +592,11 @@ if gUser=="1":
 else:
 	gunicorn="gunicorn"
 
-addGUser=subprocess.run(["useradd","-mr",gunicorn])
+if OS=="debian":
+	addGUser=subprocess.run(["useradd","-mr",gunicorn])
+elif OS=="alpine":
+	addGUser=subprocess.run(["adduser","-S",gunicorn])
+
 if addGUser.returncode==0 or addGUser.returncode==9:
 	print("Gunicorn user created")
 else:
@@ -613,7 +632,8 @@ traverseThis=curDir.split("/")
 traverseThis.pop(0)
 
 #####################CREATE GROUP, USERS AND MANAGE PERMISSIONS##################
-if addGroup(group)==0:
+
+if addGroup(group,OS)==0:
 	print("Group Added")
 	if addToGroup(nginx,group)==0:
 		print(f"{nginx} added to {group}")
@@ -671,7 +691,7 @@ while True:
 	if(portfor!="1"):
 		break
 
-	result=certPrep()
+	result=certPrep(OS)
 	if result != 0:
 		print(f"Some certbot dependent actions have failed")
 		choice=input("Enter 1 to try again. Press any other key to skip certificate installation: ")
