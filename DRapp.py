@@ -52,10 +52,13 @@ def handleVenv():
 	os.execv(str(python),[str(python), *sys.argv])
 
 ############################################CLONES REMOTE REPO##########################
-def gitClone(defaultRepo):
+def gitClone(defaultRepo,defaultInstall=False):
 	while True:
 		print("This is the default repo:", defaultRepo)
-		choice=input("Enter 1 to use the default repo. Enter 2 to use a custom repo. Enter any other key to exit: ")
+		if defaultInstall:
+			choice="1"
+		else:
+			choice=input("Enter 1 to use the default repo. Enter 2 to use a custom repo. Enter any other key to exit: ")
 		usingRepo=""
 		if choice == "1":
 			usingRepo=defaultRepo
@@ -81,7 +84,10 @@ def gitClone(defaultRepo):
 				if conf == "C":
 					print("Removing the existing directory")
 					try:
-						shutil.rmtree(alreadyEx)
+						oldDir = alreadyEx.with_name(alreadyEx.name + "Old")
+						shutil.move(str(alreadyEx), str(oldDir))
+						print(f"Existing directory moved to {oldDir}")
+						#shutil.rmtree(alreadyEx)
 					except Exception as e:
 						print("Existing directory couldn't be removed.",e," Please try again")
 						continue
@@ -106,12 +112,15 @@ def gitClone(defaultRepo):
 					continue
 
 ####################################LOCATES FILES####################################
-def locateFiles(rootDir,file,name,expDir):
+def locateFiles(rootDir,file,name,expDir,firstLocate=False):
 	while True:
 		expLoc=expDir/file
 		if (expLoc).exists():
 			print(name, "file found at:",expLoc)
-			choice=input(f"Enter 1 if you want to provide a different {name} file. Press any other key to use the default {file} file: ")
+			if firstLocate:
+				choice="firstLocate"
+			else:
+				choice=input(f"Enter 1 if you want to provide a different {name} file. Press any other key to use the default {file} file: ")
 			if choice == "1":
 				loc=input(f"Enter the path to the {name} file. The path should start from {rootDir}: ") 
 				loc=Path(loc)
@@ -299,6 +308,8 @@ if OS=="debian":
 	nginxSFLoc="/etc/nginx/conf.d"
 	gunicornFileName="gunicornDebian"
 elif OS=="alpine":
+	installThis("networkmanager",OS)
+	startSv("networkmanager",OS)
 	firewallFile="nftables.nft"
 	nginxSFLoc="/etc/nginx/http.d"
 	gunicornFileName="gunicornAlpine"
@@ -337,7 +348,16 @@ installPyPackage("psutil")
 import psutil
 
 defaultRepo="https://github.com/1SUSHANT1/myProjects.git"
-rootDir=gitClone(defaultRepo)
+
+installationMethod=input("Enter 1 for default installation. Press any othe key for manual installation: ")
+if installationMethod=="1":
+	defaultInstall = firstLocate = serverConFile = defaultGunicornUser=True
+else:
+	defaultInstall = firstLocate = serverConFile = defaultGunicornUser=False
+
+rootDir=gitClone(defaultRepo,defaultInstall)
+defaultInstall=False
+
 rootDir=Path(rootDir)
 
 #################################EXPECTED FILE LOCATIONS#############
@@ -347,10 +367,13 @@ expFiConf=rootDir/"serverConfiguration"/"firewall"
 expGuConf=rootDir/"serverConfiguration"/"gunicorn"
 
 #####################################ACTUAL FILE LOCATIONS###########
-actGuLoc=locateFiles(rootDir,gunicornFileName,"Gunicorn",expGuConf)
-actPyLoc=locateFiles(rootDir,"myPyScript.py","Python",expPyApp)
-actNgConf=locateFiles(rootDir,"nginx.conf","NGINX", expNgConf)
-actFiConf=locateFiles(rootDir,firewallFile,"Firewall", expFiConf)
+
+actGuLoc=locateFiles(rootDir,gunicornFileName,"Gunicorn",expGuConf,firstLocate)
+actPyLoc=locateFiles(rootDir,"myPyScript.py","Python",expPyApp,firstLocate)
+actNgConf=locateFiles(rootDir,"nginx.conf","NGINX", expNgConf,firstLocate)
+actFiConf=locateFiles(rootDir,firewallFile,"Firewall", expFiConf,firstLocate)
+
+firstLocate=False
 
 #print("Python file is at: ", actPyLoc)
 #print("NGINX file is at: ", actNgConf)
@@ -391,7 +414,11 @@ recoverFlag=False
 
 ##########################NGINX CONFIGURATION FILE SYNTAX AND LOCATE###############
 while True:
-	whichFile=input("Enter 1 if the NGINX file is the main configuration file. Enter 2 if it is the server configuration file: ")
+	if serverConFile:
+		whichFile="2"
+		serverConFile=False
+	else:
+		whichFile=input("Enter 1 if the NGINX file is the main configuration file. Enter 2 if it is the server configuration file: ")
 	if whichFile !="1" and whichFile != "2":
 		desicion=input("Invalid input. Enter 1 to try again. Press any other key to exit: ")
 		if desicion == "1":
@@ -594,7 +621,11 @@ elif OS=="alpine":
 
 
 ##########################GUNICORN USER CREATION#############################
-gUser=input("Enter 1 to enter a custom gunicorn user. Press any other key to use the default \"gunicorn\" user: ")
+if defaultGunicornUser:
+	gUser="default"
+	defaultGunicornUser=False
+else:
+	gUser=input("Enter 1 to enter a custom gunicorn user. Press any other key to use the default \"gunicorn\" user: ")
 if gUser=="1":
 	gunicorn=input("Enter the name of the gunicorn user: ")
 else:
@@ -610,10 +641,6 @@ if addGUser.returncode==0 or addGUser.returncode==9:
 else:
 	print("Failed to user Gunicorn user")
 
-
-#################################START SERVICES######################
-startSv("gunicorn",OS)
-startSv("nginx",OS)
 
 ##########################PREPARATION FOR USERS AND PERMISSONS###############
 nginx=""
@@ -687,6 +714,12 @@ for line in ipaddr:
 	temp = line.split("inet")[1].split("/")[0].strip()
 	localIPs.append(temp)
 
+
+
+#################################START SERVICES######################
+startSv("gunicorn",OS)
+startSv("nginx",OS)
+
 #################################RUN CERTBOT####################
 while True:
 	print(f"Please enable port forwarding from your router to one of the suitable IP Addresses below on TCP port 80 and TCP port 443 ")
@@ -711,6 +744,3 @@ while True:
 		installCert()
 		break
 
-###############################ENABLE AT STARTUP################
-startSv("nginx",OS)
-startSv("gunicorn",OS)
